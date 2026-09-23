@@ -1,24 +1,102 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><title>919 As Above So Below WebXR</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<title>919 — Quest WebXR</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.5.4/dist/aframe-extras.min.js"></script>
-<style>html,body{margin:0;height:100%;background:#06122c}#status{position:fixed;left:12px;bottom:12px;z-index:10;color:#e8eeff;background:#06122cbb;padding:8px 10px;border-radius:8px;font:12px system-ui}</style>
+<style>
+html,body{margin:0;width:100%;height:100%;background:#06122c;overflow:hidden}
+#status{position:fixed;left:10px;bottom:10px;z-index:10;color:white;background:#0009;
+padding:7px 10px;border-radius:8px;font:12px system-ui}
+</style>
 <script>
-AFRAME.registerComponent('lambda-flare',{schema:{anchor:{default:'Lamda_flare_core'}},init:function(){this.el.addEventListener('model-loaded',()=>{const r=this.el.getObject3D('mesh');if(!r)return;const a=r.getObjectByName(this.data.anchor)||r.getObjectByName('Lambda_flare_core')||r.getObjectByName('Lambda_flare_anchor');if(!a){console.warn('flare anchor not found');return}const tex=(ray=false)=>{const c=document.createElement('canvas');c.width=ray?512:256;c.height=ray?64:256;const x=c.getContext('2d');if(ray){let gx=x.createLinearGradient(0,0,512,0);gx.addColorStop(0,'#fff0');gx.addColorStop(.49,'#ffffffff');gx.addColorStop(.51,'#ffffffff');gx.addColorStop(1,'#fff0');x.fillStyle=gx;x.fillRect(0,0,512,64);let gy=x.createLinearGradient(0,0,0,64);gy.addColorStop(0,'#fff0');gy.addColorStop(.5,'#ffffffff');gy.addColorStop(1,'#fff0');x.globalCompositeOperation='destination-in';x.fillStyle=gy;x.fillRect(0,0,512,64)}else{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'#ffffffff');g.addColorStop(.12,'#fffaffee');g.addColorStop(.38,'#d7c4ff66');g.addColorStop(1,'#7650ff00');x.fillStyle=g;x.fillRect(0,0,256,256)}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t};const sprite=(map,col,op,w,h,rot=0)=>{const m=new THREE.SpriteMaterial({map,color:new THREE.Color(col),transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false,rotation:rot});const s=new THREE.Sprite(m);s.scale.set(w,h,1);return s};const g=new THREE.Group();g.name='WebXR_Lambda_Flare';const h=tex(false),q=tex(true);g.add(sprite(h,'#dfceff',.68,.78,.78));g.add(sprite(h,'#ffffff',.95,.19,.19));g.add(sprite(q,'#eee6ff',.55,1.8,.18));g.add(sprite(q,'#eee6ff',.30,1.0,.12,Math.PI/2));a.add(g)})}});
-AFRAME.registerComponent('model-status',{init:function(){this.el.addEventListener('model-loaded',()=>{const s=document.querySelector('#status');s.textContent='919 scene loaded — Enter VR when ready';setTimeout(()=>s.style.display='none',3000)});this.el.addEventListener('model-error',()=>document.querySelector('#status').textContent='Could not load 919.3.glb — check filename/path')}});
+/* Quest thumbstick locomotion without aframe-extras.
+   Left stick = move/strafe. Right stick = snap turn. */
+AFRAME.registerComponent('quest-locomotion',{
+  schema:{speed:{default:2.0},snap:{default:30}},
+  init:function(){
+    this.left={x:0,y:0}; this.right={x:0,y:0}; this.ready=true;
+    const L=document.querySelector('#leftHand'), R=document.querySelector('#rightHand');
+    const axis=(side,e)=>{
+      const a=e.detail.axis || [];
+      // WebXR controllers commonly report thumbstick as the last axis pair.
+      const n=a.length;
+      if(n>=2){
+        const x=a[n-2]||0, y=a[n-1]||0;
+        if(side==='L'){this.left.x=x;this.left.y=y}
+        else {this.right.x=x;this.right.y=y}
+      }
+    };
+    L.addEventListener('axismove',e=>axis('L',e));
+    R.addEventListener('axismove',e=>axis('R',e));
+  },
+  tick:function(time,dt){
+    if(!dt) return;
+    const rig=this.el.object3D;
+    const cam=document.querySelector('#camera').object3D;
+    const dead=.18, s=this.data.speed*(dt/1000);
+    let x=Math.abs(this.left.x)>dead?this.left.x:0;
+    let y=Math.abs(this.left.y)>dead?this.left.y:0;
+    if(x||y){
+      const dir=new THREE.Vector3();
+      cam.getWorldDirection(dir); dir.y=0;
+      if(dir.lengthSq()>0) dir.normalize();
+      const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
+      rig.position.addScaledVector(dir,-y*s);
+      rig.position.addScaledVector(right,x*s);
+    }
+    const rx=Math.abs(this.right.x)>0.72?this.right.x:0;
+    if(rx && this.ready){
+      rig.rotation.y -= THREE.MathUtils.degToRad(this.data.snap)*Math.sign(rx);
+      this.ready=false;
+    }
+    if(Math.abs(this.right.x)<.35) this.ready=true;
+  }
+});
+
+AFRAME.registerComponent('model-status',{
+ init:function(){
+   const s=document.querySelector('#status');
+   this.el.addEventListener('model-loaded',()=>{s.textContent='919 loaded — enter VR';setTimeout(()=>s.style.display='none',3000)});
+   this.el.addEventListener('model-error',()=>{s.textContent='919.3.glb failed to load'});
+ }
+});
 </script>
-</head><body>
+</head>
+<body>
 <div id="status">Loading 919.3.glb…</div>
-<a-scene background="color:#06122c" renderer="antialias:true;colorManagement:true;physicallyCorrectLights:true;sortObjects:true" vr-mode-ui="enabled:true">
-<a-assets timeout="120000"><a-asset-item id="aasbModel" src="919.3.glb?v=2"></a-asset-item></a-assets>
-<a-entity id="aasb" gltf-model="#aasbModel" position="0 0 -4" model-status lambda-flare="anchor:Lamda_flare_core"></a-entity>
-<a-entity light="type:ambient;color:#c7d2ff;intensity:.80"></a-entity>
-<a-entity light="type:directional;color:#ffffff;intensity:1.15" position="-3 6 7"></a-entity>
-<a-entity light="type:directional;color:#a9bcff;intensity:.70" position="5 3 6"></a-entity>
-<a-entity light="type:point;color:#ffffff;intensity:.75;distance:20;decay:1" position="0 2.5 4"></a-entity>
-<a-plane position="0 -2.6 -4" rotation="-90 0 0" width="18" height="18" material="color:#020714;metalness:.88;roughness:.18"></a-plane>
-<a-entity id="rig" position="0 0 9" movement-controls="speed:.12"><a-entity id="camera" camera look-controls wasd-controls position="0 1.6 0"></a-entity><a-entity laser-controls="hand:left"></a-entity><a-entity laser-controls="hand:right"></a-entity></a-entity>
-</a-scene></body></html>
+
+<a-scene
+  background="color:#06122c"
+  renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
+  vr-mode-ui="enabled:true">
+
+  <a-assets timeout="120000">
+    <a-asset-item id="aasbModel" src="919.3.glb?v=3"></a-asset-item>
+  </a-assets>
+
+  <!-- Blender model only. No sprite flare: eliminates stereo conflict. -->
+  <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status></a-entity>
+
+  <!-- Brighter neutral lighting -->
+  <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
+  <a-entity light="type:directional; color:#ffffff; intensity:1.25" position="-3 5 6"></a-entity>
+  <a-entity light="type:directional; color:#b5c5ff; intensity:0.75" position="4 2 5"></a-entity>
+
+  <!-- One XR camera only. Headset supplies the two stereo eye views. -->
+  <a-entity id="rig" position="0 0 8" quest-locomotion="speed:2.0; snap:30">
+    <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls="acceleration:20"></a-camera>
+
+    <!-- Actual tracked Quest controllers -->
+    <a-entity id="leftHand"
+      hand-controls="hand:left; handModelStyle:lowPoly; color:#ffffff">
+    </a-entity>
+    <a-entity id="rightHand"
+      hand-controls="hand:right; handModelStyle:lowPoly; color:#ffffff">
+    </a-entity>
+  </a-entity>
+
+</a-scene>
+</body>
+</html>
