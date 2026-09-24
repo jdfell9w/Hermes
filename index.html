@@ -58,38 +58,35 @@ AFRAME.registerComponent('quest-locomotion',{
 /* Procedural cobalt-blue nebula texture: no external image required. */
 AFRAME.registerComponent('cobalt-nebula',{
   init:function(){
-    const c=document.createElement('canvas'); c.width=1536; c.height=768;
+    const c=document.createElement('canvas'); c.width=2048; c.height=1024;
     const x=c.getContext('2d');
-    const g=x.createLinearGradient(0,0,c.width,c.height);
-    g.addColorStop(0,'#020716'); g.addColorStop(.22,'#061c66');
-    g.addColorStop(.48,'#080d2b'); g.addColorStop(.72,'#1039c9'); g.addColorStop(1,'#020716');
-    x.fillStyle=g; x.fillRect(0,0,c.width,c.height);
-    // Broad, soft cobalt cloud banks inspired by the supplied reference.
-    const clouds=[
-      [150,120,330,'45,85,255',.46],[420,80,270,'30,68,245',.40],
-      [760,180,360,'25,55,205',.30],[1160,115,320,'40,80,255',.48],
-      [1380,300,290,'18,55,220',.35],[220,520,350,'25,65,230',.36],
-      [600,610,300,'35,75,255',.40],[1010,560,390,'25,55,210',.34],
-      [1330,650,330,'35,78,255',.42],[820,390,260,'65,50,180',.16]
-    ];
-    clouds.forEach(([cx,cy,r,rgb,a])=>{
-      const q=x.createRadialGradient(cx,cy,0,cx,cy,r);
-      q.addColorStop(0,`rgba(${rgb},${a})`); q.addColorStop(.38,`rgba(${rgb},${a*.58})`);
-      q.addColorStop(1,`rgba(${rgb},0)`); x.fillStyle=q; x.fillRect(cx-r,cy-r,r*2,r*2);
+    x.fillStyle='#02071c'; x.fillRect(0,0,c.width,c.height);
+    // Hundreds of overlapping feathered clouds: cobalt-blue, soft, no hard bands or stars.
+    const rnd=(a,b)=>a+Math.random()*(b-a);
+    for(let i=0;i<150;i++){
+      const cx=rnd(-150,2198), cy=rnd(-120,1144), rx=rnd(150,520), ry=rnd(70,250);
+      const cobalt=i%4===0?[48,72,255]:i%4===1?[22,50,210]:i%4===2?[34,83,255]:[52,40,170];
+      x.save(); x.translate(cx,cy); x.scale(1,ry/rx);
+      const g=x.createRadialGradient(0,0,0,0,0,rx);
+      const a=rnd(.035,.13);
+      g.addColorStop(0,`rgba(${cobalt[0]},${cobalt[1]},${cobalt[2]},${a})`);
+      g.addColorStop(.35,`rgba(${cobalt[0]},${cobalt[1]},${cobalt[2]},${a*.72})`);
+      g.addColorStop(.72,`rgba(${cobalt[0]},${cobalt[1]},${cobalt[2]},${a*.22})`);
+      g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g;
+      x.fillRect(-rx,-rx,rx*2,rx*2); x.restore();
+    }
+    // Large diffuse cobalt illumination, matching the supplied Blender reference.
+    [[360,160,520],[1650,210,560],[390,820,570],[1510,760,650],[1020,510,500]].forEach(([cx,cy,r],i)=>{
+      const g=x.createRadialGradient(cx,cy,0,cx,cy,r);
+      g.addColorStop(0,i===2?'rgba(40,65,255,.32)':'rgba(25,65,255,.28)');
+      g.addColorStop(.55,'rgba(20,45,190,.12)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      x.fillStyle=g; x.fillRect(cx-r,cy-r,r*2,r*2);
     });
-    // Dark sinuous lanes create the swirling nebular structure.
-    x.globalCompositeOperation='multiply'; x.lineCap='round';
-    [[110,250,1480,430,120],[0,610,1420,360,90],[300,0,900,760,75]].forEach((v,i)=>{
-      x.beginPath(); x.moveTo(v[0],v[1]);
-      x.bezierCurveTo(v[2]*.35,v[1]+(i? -210:180),v[2]*.72,v[3]+(i?180:-170),v[2],v[3]);
-      x.strokeStyle='rgba(1,4,20,.42)'; x.lineWidth=v[4]; x.stroke();
-    });
-    x.globalCompositeOperation='source-over';
     const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
     tex.wrapS=THREE.RepeatWrapping; tex.wrapT=THREE.ClampToEdgeWrapping;
-    const mesh=this.el.getObject3D('mesh');
+    tex.minFilter=THREE.LinearFilter; tex.magFilter=THREE.LinearFilter;
     const apply=()=>{const m=this.el.getObject3D('mesh'); if(m){m.material.map=tex;m.material.color.set('#ffffff');m.material.needsUpdate=true;}};
-    if(mesh) apply(); else this.el.addEventListener('object3dset',apply,{once:true});
+    if(this.el.getObject3D('mesh')) apply(); else this.el.addEventListener('object3dset',apply,{once:true});
   }
 });
 
@@ -103,10 +100,10 @@ AFRAME.registerComponent('lambda-lens-flare',{
       const s=new THREE.Sprite(m); s.scale.set(size,size,1); this.el.object3D.add(s); return s;
     };
     // soft cobalt/violet halo
-    make(.48,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(.07,'rgba(215,225,255,.9)');g.addColorStop(.22,'rgba(115,120,255,.36)');g.addColorStop(.55,'rgba(72,45,210,.13)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},.9);
+    make(.72,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(.07,'rgba(215,225,255,.9)');g.addColorStop(.22,'rgba(115,120,255,.36)');g.addColorStop(.55,'rgba(72,45,210,.13)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},.9);
     // starburst with a tight white core
-    make(.62,(x,n)=>{x.translate(128,128);let g=x.createLinearGradient(-128,0,128,0);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(.46,'rgba(220,225,255,.08)');g.addColorStop(.5,'rgba(255,255,255,.9)');g.addColorStop(.54,'rgba(220,225,255,.08)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(-128,-2,256,4);x.rotate(Math.PI/2);x.fillRect(-128,-2,256,4);x.rotate(Math.PI/4);x.fillRect(-95,-1,190,2);x.rotate(Math.PI/2);x.fillRect(-95,-1,190,2);},.95);
-    make(.10,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'white');g.addColorStop(.2,'rgba(255,248,220,1)');g.addColorStop(.55,'rgba(190,205,255,.65)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},1);
+    make(.88,(x,n)=>{x.translate(128,128);let g=x.createLinearGradient(-128,0,128,0);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(.46,'rgba(220,225,255,.08)');g.addColorStop(.5,'rgba(255,255,255,.9)');g.addColorStop(.54,'rgba(220,225,255,.08)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(-128,-2,256,4);x.rotate(Math.PI/2);x.fillRect(-128,-2,256,4);x.rotate(Math.PI/4);x.fillRect(-95,-1,190,2);x.rotate(Math.PI/2);x.fillRect(-95,-1,190,2);},.95);
+    make(.16,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'white');g.addColorStop(.2,'rgba(255,248,220,1)');g.addColorStop(.55,'rgba(190,205,255,.65)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},1);
   }
 });
 
@@ -128,7 +125,7 @@ AFRAME.registerComponent('model-status',{
   vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=4"></a-asset-item>
+    <a-asset-item id="aasbModel" src="919.3.glb?v=5"></a-asset-item>
   </a-assets>
 
   <!-- Blender model only. No sprite flare: eliminates stereo conflict. -->
@@ -140,7 +137,7 @@ AFRAME.registerComponent('model-status',{
   </a-sphere>
 
   <!-- Stereo-safe camera-facing flare at lambda apex -->
-  <a-entity id="lambdaFlare" position="0 2.72 0.05" lambda-lens-flare></a-entity>
+  <a-entity id="lambdaFlare" position="-0.55 2.72 0.08" lambda-lens-flare></a-entity>
 
   <!-- Brighter neutral lighting -->
   <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
