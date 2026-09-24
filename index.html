@@ -6,22 +6,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#06122c;overflow:hidden}
+html,body{margin:0;width:100%;height:100%;background:#020716;overflow:hidden}
 #status{position:fixed;left:10px;bottom:10px;z-index:10;color:white;background:#0009;
 padding:7px 10px;border-radius:8px;font:12px system-ui}
 </style>
 <script>
-/* Quest thumbstick locomotion without aframe-extras.
-   Left stick = move/strafe. Right stick = snap turn. */
 AFRAME.registerComponent('quest-locomotion',{
   schema:{speed:{default:2.0},snap:{default:30}},
   init:function(){
     this.left={x:0,y:0}; this.right={x:0,y:0}; this.ready=true;
     const L=document.querySelector('#leftHand'), R=document.querySelector('#rightHand');
     const axis=(side,e)=>{
-      const a=e.detail.axis || [];
-      // WebXR controllers commonly report thumbstick as the last axis pair.
-      const n=a.length;
+      const a=e.detail.axis || [], n=a.length;
       if(n>=2){
         const x=a[n-2]||0, y=a[n-1]||0;
         if(side==='L'){this.left.x=x;this.left.y=y}
@@ -33,8 +29,7 @@ AFRAME.registerComponent('quest-locomotion',{
   },
   tick:function(time,dt){
     if(!dt) return;
-    const rig=this.el.object3D;
-    const cam=document.querySelector('#camera').object3D;
+    const rig=this.el.object3D, cam=document.querySelector('#camera').object3D;
     const dead=.18, s=this.data.speed*(dt/1000);
     let x=Math.abs(this.left.x)>dead?this.left.x:0;
     let y=Math.abs(this.left.y)>dead?this.left.y:0;
@@ -55,62 +50,61 @@ AFRAME.registerComponent('quest-locomotion',{
   }
 });
 
-/* Procedural cobalt-blue nebula texture: no external image required. */
-AFRAME.registerComponent('cobalt-nebula',{
-  init:function(){
-    const c=document.createElement('canvas'); c.width=2048; c.height=1024;
-    const x=c.getContext('2d');
-    x.fillStyle='#02071c'; x.fillRect(0,0,c.width,c.height);
-    // Hundreds of overlapping feathered clouds: cobalt-blue, soft, no hard bands or stars.
-    const rnd=(a,b)=>a+Math.random()*(b-a);
-    for(let i=0;i<150;i++){
-      const cx=rnd(-150,2198), cy=rnd(-120,1144), rx=rnd(150,520), ry=rnd(70,250);
-      const cobalt=i%4===0?[48,72,255]:i%4===1?[22,50,210]:i%4===2?[34,83,255]:[52,40,170];
-      x.save(); x.translate(cx,cy); x.scale(1,ry/rx);
-      const g=x.createRadialGradient(0,0,0,0,0,rx);
-      const a=rnd(.035,.13);
-      g.addColorStop(0,`rgba(${cobalt[0]},${cobalt[1]},${cobalt[2]},${a})`);
-      g.addColorStop(.35,`rgba(${cobalt[0]},${cobalt[1]},${cobalt[2]},${a*.72})`);
-      g.addColorStop(.72,`rgba(${cobalt[0]},${cobalt[1]},${cobalt[2]},${a*.22})`);
-      g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g;
-      x.fillRect(-rx,-rx,rx*2,rx*2); x.restore();
-    }
-    // Large diffuse cobalt illumination, matching the supplied Blender reference.
-    [[360,160,520],[1650,210,560],[390,820,570],[1510,760,650],[1020,510,500]].forEach(([cx,cy,r],i)=>{
-      const g=x.createRadialGradient(cx,cy,0,cx,cy,r);
-      g.addColorStop(0,i===2?'rgba(40,65,255,.32)':'rgba(25,65,255,.28)');
-      g.addColorStop(.55,'rgba(20,45,190,.12)'); g.addColorStop(1,'rgba(0,0,0,0)');
-      x.fillStyle=g; x.fillRect(cx-r,cy-r,r*2,r*2);
-    });
-    const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
-    tex.wrapS=THREE.RepeatWrapping; tex.wrapT=THREE.ClampToEdgeWrapping;
-    tex.minFilter=THREE.LinearFilter; tex.magFilter=THREE.LinearFilter;
-    const apply=()=>{const m=this.el.getObject3D('mesh'); if(m){m.material.map=tex;m.material.color.set('#ffffff');m.material.needsUpdate=true;}};
-    if(this.el.getObject3D('mesh')) apply(); else this.el.addEventListener('object3dset',apply,{once:true});
-  }
-});
-
-/* Camera-facing, additive flare at the lambda apex. */
+/* Camera-facing additive flare retained from the working version. */
 AFRAME.registerComponent('lambda-lens-flare',{
   init:function(){
     const make=(size,draw,opacity=1)=>{
-      const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d'); draw(x,256);
+      const c=document.createElement('canvas'); c.width=c.height=256;
+      const x=c.getContext('2d'); draw(x,256);
       const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
-      const m=new THREE.SpriteMaterial({map:t,transparent:true,opacity,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending});
-      const s=new THREE.Sprite(m); s.scale.set(size,size,1); this.el.object3D.add(s); return s;
+      const m=new THREE.SpriteMaterial({
+        map:t,transparent:true,opacity,depthWrite:false,depthTest:true,
+        blending:THREE.AdditiveBlending
+      });
+      const s=new THREE.Sprite(m); s.scale.set(size,size,1);
+      this.el.object3D.add(s);
     };
-    // soft cobalt/violet halo
-    make(.72,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(.07,'rgba(215,225,255,.9)');g.addColorStop(.22,'rgba(115,120,255,.36)');g.addColorStop(.55,'rgba(72,45,210,.13)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},.9);
-    // starburst with a tight white core
-    make(.88,(x,n)=>{x.translate(128,128);let g=x.createLinearGradient(-128,0,128,0);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(.46,'rgba(220,225,255,.08)');g.addColorStop(.5,'rgba(255,255,255,.9)');g.addColorStop(.54,'rgba(220,225,255,.08)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(-128,-2,256,4);x.rotate(Math.PI/2);x.fillRect(-128,-2,256,4);x.rotate(Math.PI/4);x.fillRect(-95,-1,190,2);x.rotate(Math.PI/2);x.fillRect(-95,-1,190,2);},.95);
-    make(.16,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'white');g.addColorStop(.2,'rgba(255,248,220,1)');g.addColorStop(.55,'rgba(190,205,255,.65)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},1);
+    make(.48,(x,n)=>{
+      let g=x.createRadialGradient(128,128,0,128,128,128);
+      g.addColorStop(0,'rgba(255,255,255,.95)');
+      g.addColorStop(.07,'rgba(215,225,255,.9)');
+      g.addColorStop(.22,'rgba(115,120,255,.36)');
+      g.addColorStop(.55,'rgba(72,45,210,.13)');
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      x.fillStyle=g;x.fillRect(0,0,n,n);
+    },.9);
+    make(.62,(x,n)=>{
+      x.translate(128,128);
+      let g=x.createLinearGradient(-128,0,128,0);
+      g.addColorStop(0,'rgba(255,255,255,0)');
+      g.addColorStop(.46,'rgba(220,225,255,.08)');
+      g.addColorStop(.5,'rgba(255,255,255,.9)');
+      g.addColorStop(.54,'rgba(220,225,255,.08)');
+      g.addColorStop(1,'rgba(255,255,255,0)');
+      x.fillStyle=g;
+      x.fillRect(-128,-2,256,4);
+      x.rotate(Math.PI/2); x.fillRect(-128,-2,256,4);
+      x.rotate(Math.PI/4); x.fillRect(-95,-1,190,2);
+      x.rotate(Math.PI/2); x.fillRect(-95,-1,190,2);
+    },.95);
+    make(.10,(x,n)=>{
+      let g=x.createRadialGradient(128,128,0,128,128,128);
+      g.addColorStop(0,'white');
+      g.addColorStop(.2,'rgba(255,248,220,1)');
+      g.addColorStop(.55,'rgba(190,205,255,.65)');
+      g.addColorStop(1,'rgba(255,255,255,0)');
+      x.fillStyle=g;x.fillRect(0,0,n,n);
+    },1);
   }
 });
 
 AFRAME.registerComponent('model-status',{
  init:function(){
    const s=document.querySelector('#status');
-   this.el.addEventListener('model-loaded',()=>{s.textContent='919 loaded — enter VR';setTimeout(()=>s.style.display='none',3000)});
+   this.el.addEventListener('model-loaded',()=>{
+     s.textContent='919 loaded — enter VR';
+     setTimeout(()=>s.style.display='none',3000)
+   });
    this.el.addEventListener('model-error',()=>{s.textContent='919.3.glb failed to load'});
  }
 });
@@ -120,43 +114,39 @@ AFRAME.registerComponent('model-status',{
 <div id="status">Loading 919.3.glb…</div>
 
 <a-scene
-  background="color:#06132f"
+  background="color:#020716"
   renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
   vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=5"></a-asset-item>
+    <a-asset-item id="aasbModel" src="919.3.glb?v=6"></a-asset-item>
+    <!-- Exact supplied 1536x768 cobalt nebula image. -->
+    <img id="nebulaTexture" src="nebula.png?v=1" crossorigin="anonymous">
   </a-assets>
 
-  <!-- Blender model only. No sprite flare: eliminates stereo conflict. -->
   <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status></a-entity>
 
-  <!-- Cobalt-blue swirling nebula, no stars -->
-  <a-sphere id="blueBackground" radius="80" segments-width="64" segments-height="32" cobalt-nebula
-    material="shader:flat; color:#ffffff; side:back; fog:false">
+  <!-- Actual supplied nebula image on the inside of the environment sphere.
+       Flat/unlit so WebXR lighting cannot wash out its cobalt/black contrast. -->
+  <a-sphere id="nebulaBackground"
+    radius="80"
+    segments-width="96"
+    segments-height="64"
+    rotation="0 -90 0"
+    material="shader:flat; src:#nebulaTexture; side:back; color:#ffffff; fog:false">
   </a-sphere>
 
-  <!-- Stereo-safe camera-facing flare at lambda apex -->
-  <a-entity id="lambdaFlare" position="-0.55 2.72 0.08" lambda-lens-flare></a-entity>
+  <a-entity id="lambdaFlare" position="0 2.72 0.05" lambda-lens-flare></a-entity>
 
-  <!-- Brighter neutral lighting -->
   <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
   <a-entity light="type:directional; color:#ffffff; intensity:1.25" position="-3 5 6"></a-entity>
   <a-entity light="type:directional; color:#b5c5ff; intensity:0.75" position="4 2 5"></a-entity>
 
-  <!-- One XR camera only. Headset supplies the two stereo eye views. -->
   <a-entity id="rig" position="0 0 8" quest-locomotion="speed:2.0; snap:30">
     <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls="acceleration:20"></a-camera>
-
-    <!-- Actual tracked Quest controllers -->
-    <a-entity id="leftHand"
-      hand-controls="hand:left; handModelStyle:lowPoly; color:#ffffff">
-    </a-entity>
-    <a-entity id="rightHand"
-      hand-controls="hand:right; handModelStyle:lowPoly; color:#ffffff">
-    </a-entity>
+    <a-entity id="leftHand" hand-controls="hand:left; handModelStyle:lowPoly; color:#ffffff"></a-entity>
+    <a-entity id="rightHand" hand-controls="hand:right; handModelStyle:lowPoly; color:#ffffff"></a-entity>
   </a-entity>
-
 </a-scene>
 </body>
 </html>
