@@ -68,16 +68,31 @@ AFRAME.registerComponent('model-status',{
 <div id="status">Loading 919.3.glb…</div>
 
 <a-scene
-  background="color:#06122c"
+  background="color:#06132f"
   renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
   vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=3"></a-asset-item>
+    <a-asset-item id="aasbModel" src="919.3.glb?v=4"></a-asset-item>
   </a-assets>
 
   <!-- Blender model only. No sprite flare: eliminates stereo conflict. -->
   <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status></a-entity>
+
+  <!-- Stereo-safe 3D background, no stars -->
+  <a-sphere id="blueBackground" radius="80"
+    material="shader:standard; color:#071a46; roughness:1; metalness:0; side:back; fog:false">
+  </a-sphere>
+
+  <!-- Stereo-safe world-space flare test at lambda apex -->
+  <a-entity id="lambdaFlare" position="0 2.72 0.05">
+    <a-sphere radius="0.035"
+      material="shader:flat; color:#fff3c4; emissive:#ffd36a; emissiveIntensity:3; transparent:true; opacity:0.95">
+    </a-sphere>
+    <a-sphere radius="0.09"
+      material="shader:flat; color:#ffd36a; emissive:#ffb52e; emissiveIntensity:2; transparent:true; opacity:0.18; depthWrite:false">
+    </a-sphere>
+  </a-entity>
 
   <!-- Brighter neutral lighting -->
   <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
