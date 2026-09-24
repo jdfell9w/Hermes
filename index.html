@@ -55,6 +55,61 @@ AFRAME.registerComponent('quest-locomotion',{
   }
 });
 
+/* Procedural cobalt-blue nebula texture: no external image required. */
+AFRAME.registerComponent('cobalt-nebula',{
+  init:function(){
+    const c=document.createElement('canvas'); c.width=1536; c.height=768;
+    const x=c.getContext('2d');
+    const g=x.createLinearGradient(0,0,c.width,c.height);
+    g.addColorStop(0,'#020716'); g.addColorStop(.22,'#061c66');
+    g.addColorStop(.48,'#080d2b'); g.addColorStop(.72,'#1039c9'); g.addColorStop(1,'#020716');
+    x.fillStyle=g; x.fillRect(0,0,c.width,c.height);
+    // Broad, soft cobalt cloud banks inspired by the supplied reference.
+    const clouds=[
+      [150,120,330,'45,85,255',.46],[420,80,270,'30,68,245',.40],
+      [760,180,360,'25,55,205',.30],[1160,115,320,'40,80,255',.48],
+      [1380,300,290,'18,55,220',.35],[220,520,350,'25,65,230',.36],
+      [600,610,300,'35,75,255',.40],[1010,560,390,'25,55,210',.34],
+      [1330,650,330,'35,78,255',.42],[820,390,260,'65,50,180',.16]
+    ];
+    clouds.forEach(([cx,cy,r,rgb,a])=>{
+      const q=x.createRadialGradient(cx,cy,0,cx,cy,r);
+      q.addColorStop(0,`rgba(${rgb},${a})`); q.addColorStop(.38,`rgba(${rgb},${a*.58})`);
+      q.addColorStop(1,`rgba(${rgb},0)`); x.fillStyle=q; x.fillRect(cx-r,cy-r,r*2,r*2);
+    });
+    // Dark sinuous lanes create the swirling nebular structure.
+    x.globalCompositeOperation='multiply'; x.lineCap='round';
+    [[110,250,1480,430,120],[0,610,1420,360,90],[300,0,900,760,75]].forEach((v,i)=>{
+      x.beginPath(); x.moveTo(v[0],v[1]);
+      x.bezierCurveTo(v[2]*.35,v[1]+(i? -210:180),v[2]*.72,v[3]+(i?180:-170),v[2],v[3]);
+      x.strokeStyle='rgba(1,4,20,.42)'; x.lineWidth=v[4]; x.stroke();
+    });
+    x.globalCompositeOperation='source-over';
+    const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+    tex.wrapS=THREE.RepeatWrapping; tex.wrapT=THREE.ClampToEdgeWrapping;
+    const mesh=this.el.getObject3D('mesh');
+    const apply=()=>{const m=this.el.getObject3D('mesh'); if(m){m.material.map=tex;m.material.color.set('#ffffff');m.material.needsUpdate=true;}};
+    if(mesh) apply(); else this.el.addEventListener('object3dset',apply,{once:true});
+  }
+});
+
+/* Camera-facing, additive flare at the lambda apex. */
+AFRAME.registerComponent('lambda-lens-flare',{
+  init:function(){
+    const make=(size,draw,opacity=1)=>{
+      const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d'); draw(x,256);
+      const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+      const m=new THREE.SpriteMaterial({map:t,transparent:true,opacity,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending});
+      const s=new THREE.Sprite(m); s.scale.set(size,size,1); this.el.object3D.add(s); return s;
+    };
+    // soft cobalt/violet halo
+    make(.48,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(.07,'rgba(215,225,255,.9)');g.addColorStop(.22,'rgba(115,120,255,.36)');g.addColorStop(.55,'rgba(72,45,210,.13)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},.9);
+    // starburst with a tight white core
+    make(.62,(x,n)=>{x.translate(128,128);let g=x.createLinearGradient(-128,0,128,0);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(.46,'rgba(220,225,255,.08)');g.addColorStop(.5,'rgba(255,255,255,.9)');g.addColorStop(.54,'rgba(220,225,255,.08)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(-128,-2,256,4);x.rotate(Math.PI/2);x.fillRect(-128,-2,256,4);x.rotate(Math.PI/4);x.fillRect(-95,-1,190,2);x.rotate(Math.PI/2);x.fillRect(-95,-1,190,2);},.95);
+    make(.10,(x,n)=>{let g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'white');g.addColorStop(.2,'rgba(255,248,220,1)');g.addColorStop(.55,'rgba(190,205,255,.65)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,n,n);},1);
+  }
+});
+
 AFRAME.registerComponent('model-status',{
  init:function(){
    const s=document.querySelector('#status');
@@ -79,20 +134,13 @@ AFRAME.registerComponent('model-status',{
   <!-- Blender model only. No sprite flare: eliminates stereo conflict. -->
   <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status></a-entity>
 
-  <!-- Stereo-safe 3D background, no stars -->
-  <a-sphere id="blueBackground" radius="80"
-    material="shader:standard; color:#071a46; roughness:1; metalness:0; side:back; fog:false">
+  <!-- Cobalt-blue swirling nebula, no stars -->
+  <a-sphere id="blueBackground" radius="80" segments-width="64" segments-height="32" cobalt-nebula
+    material="shader:flat; color:#ffffff; side:back; fog:false">
   </a-sphere>
 
-  <!-- Stereo-safe world-space flare test at lambda apex -->
-  <a-entity id="lambdaFlare" position="0 2.72 0.05">
-    <a-sphere radius="0.035"
-      material="shader:flat; color:#fff3c4; emissive:#ffd36a; emissiveIntensity:3; transparent:true; opacity:0.95">
-    </a-sphere>
-    <a-sphere radius="0.09"
-      material="shader:flat; color:#ffd36a; emissive:#ffb52e; emissiveIntensity:2; transparent:true; opacity:0.18; depthWrite:false">
-    </a-sphere>
-  </a-entity>
+  <!-- Stereo-safe camera-facing flare at lambda apex -->
+  <a-entity id="lambdaFlare" position="0 2.72 0.05" lambda-lens-flare></a-entity>
 
   <!-- Brighter neutral lighting -->
   <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
