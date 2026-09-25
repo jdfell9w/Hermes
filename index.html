@@ -89,16 +89,34 @@ AFRAME.registerComponent('model-finish',{
 AFRAME.registerComponent('earth-slow-rotate',{
  schema:{period:{default:180}},
  init:function(){
-  this.earth=null;
+  this.pivot=null;
   this.el.addEventListener('model-loaded',()=>{
    const root=this.el.getObject3D('mesh');
-   this.earth=root && root.getObjectByName('Sphere');
-   if(!this.earth) console.error('Earth node Sphere not found');
+   const earth=root && root.getObjectByName('Sphere');
+   if(!earth || !earth.parent){
+    console.error('Earth node Sphere not found');
+    return;
+   }
+
+   // Insert a pivot at Earth's exported origin without changing its appearance.
+   const parent=earth.parent;
+   const pivot=new THREE.Group();
+   pivot.name='Earth_WebXR_Rotation_Pivot';
+   pivot.position.copy(earth.position);
+   pivot.quaternion.copy(earth.quaternion);
+   parent.add(pivot);
+
+   // Preserve scale on Earth; move position/orientation responsibility to pivot.
+   earth.position.set(0,0,0);
+   earth.quaternion.identity();
+   pivot.add(earth);
+
+   this.pivot=pivot;
   });
  },
  tick:function(t,dt){
-  if(!this.earth||!dt)return;
-  this.earth.rotation.y+=(Math.PI*2)*(dt/1000)/this.data.period;
+  if(!this.pivot || !dt) return;
+  this.pivot.rotateY((Math.PI*2)*(dt/1000)/this.data.period);
  }
 });
 
@@ -123,7 +141,7 @@ AFRAME.registerComponent('model-status',{
   vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=13"></a-asset-item>
+    <a-asset-item id="aasbModel" src="919.3.glb?v=14"></a-asset-item>
     <!-- Exact supplied 1536x768 cobalt nebula image. -->
     <img id="nebulaTexture" src="nebula.png?v=12" crossorigin="anonymous">
   </a-assets>
