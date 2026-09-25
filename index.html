@@ -53,48 +53,60 @@ AFRAME.registerComponent('quest-locomotion',{
 /* Camera-facing additive flare retained from the working version. */
 AFRAME.registerComponent('lambda-lens-flare',{
   init:function(){
-    const make=(size,draw,opacity=1)=>{
-      const c=document.createElement('canvas'); c.width=c.height=256;
-      const x=c.getContext('2d'); draw(x,256);
-      const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
-      const m=new THREE.SpriteMaterial({
-        map:t,transparent:true,opacity,depthWrite:false,depthTest:true,
-        blending:THREE.AdditiveBlending
-      });
-      const s=new THREE.Sprite(m); s.scale.set(size,size,1);
-      this.el.object3D.add(s);
+    const c=document.createElement('canvas');
+    c.width=c.height=512;
+    const x=c.getContext('2d'), cx=256, cy=256;
+
+    // Soft luminous core.
+    let g=x.createRadialGradient(cx,cy,0,cx,cy,110);
+    g.addColorStop(0,'rgba(255,255,255,1)');
+    g.addColorStop(.045,'rgba(255,250,225,1)');
+    g.addColorStop(.12,'rgba(220,225,255,.92)');
+    g.addColorStop(.32,'rgba(125,120,255,.38)');
+    g.addColorStop(.68,'rgba(55,45,190,.12)');
+    g.addColorStop(1,'rgba(30,20,120,0)');
+    x.fillStyle=g; x.fillRect(0,0,512,512);
+
+    // Long tapered rays, all sharing exactly the same center.
+    x.save(); x.translate(cx,cy);
+    const ray=(angle,length,width,alpha)=>{
+      x.save(); x.rotate(angle);
+      const rg=x.createLinearGradient(0,0,length,0);
+      rg.addColorStop(0,`rgba(255,255,255,${alpha})`);
+      rg.addColorStop(.18,`rgba(235,235,255,${alpha*.55})`);
+      rg.addColorStop(1,'rgba(210,220,255,0)');
+      x.fillStyle=rg;
+      x.beginPath(); x.moveTo(0,-width/2); x.lineTo(length,0); x.lineTo(0,width/2); x.closePath(); x.fill();
+      x.restore();
     };
-    make(.48,(x,n)=>{
-      let g=x.createRadialGradient(128,128,0,128,128,128);
-      g.addColorStop(0,'rgba(255,255,255,.95)');
-      g.addColorStop(.07,'rgba(215,225,255,.9)');
-      g.addColorStop(.22,'rgba(115,120,255,.36)');
-      g.addColorStop(.55,'rgba(72,45,210,.13)');
-      g.addColorStop(1,'rgba(0,0,0,0)');
-      x.fillStyle=g;x.fillRect(0,0,n,n);
-    },.9);
-    make(.62,(x,n)=>{
-      x.translate(128,128);
-      let g=x.createLinearGradient(-128,0,128,0);
-      g.addColorStop(0,'rgba(255,255,255,0)');
-      g.addColorStop(.46,'rgba(220,225,255,.08)');
-      g.addColorStop(.5,'rgba(255,255,255,.9)');
-      g.addColorStop(.54,'rgba(220,225,255,.08)');
-      g.addColorStop(1,'rgba(255,255,255,0)');
-      x.fillStyle=g;
-      x.fillRect(-128,-2,256,4);
-      x.rotate(Math.PI/2); x.fillRect(-128,-2,256,4);
-      x.rotate(Math.PI/4); x.fillRect(-95,-1,190,2);
-      x.rotate(Math.PI/2); x.fillRect(-95,-1,190,2);
-    },.95);
-    make(.10,(x,n)=>{
-      let g=x.createRadialGradient(128,128,0,128,128,128);
-      g.addColorStop(0,'white');
-      g.addColorStop(.2,'rgba(255,248,220,1)');
-      g.addColorStop(.55,'rgba(190,205,255,.65)');
-      g.addColorStop(1,'rgba(255,255,255,0)');
-      x.fillStyle=g;x.fillRect(0,0,n,n);
-    },1);
+    ray(0,250,4,.95); ray(Math.PI,250,4,.95);
+    ray(Math.PI/2,250,4,.95); ray(-Math.PI/2,250,4,.95);
+    ray(Math.PI/4,190,2.2,.58); ray(Math.PI*5/4,190,2.2,.58);
+    ray(Math.PI*3/4,190,2.2,.58); ray(-Math.PI/4,190,2.2,.58);
+    x.restore();
+
+    const tex=new THREE.CanvasTexture(c);
+    tex.colorSpace=THREE.SRGBColorSpace;
+    const mat=new THREE.SpriteMaterial({
+      map:tex,transparent:true,opacity:1,depthWrite:false,depthTest:false,
+      blending:THREE.AdditiveBlending
+    });
+    const sprite=new THREE.Sprite(mat);
+    sprite.scale.set(2.0,2.0,1);
+    this.el.object3D.add(sprite);
+  }
+});
+
+/* WebXR-only brightening for the Lambda mesh.
+   Adds light aimed at the Lambda without changing the GLB material. */
+AFRAME.registerComponent('lambda-webxr-light',{
+  init:function(){
+    const light=new THREE.PointLight(0x806cff,3.4,5.0,1.7);
+    light.position.set(0,0.05,0.85);
+    this.el.object3D.add(light);
+    const fill=new THREE.PointLight(0xffffff,1.15,4.0,2);
+    fill.position.set(0,0.15,1.1);
+    this.el.object3D.add(fill);
   }
 });
 
@@ -119,9 +131,9 @@ AFRAME.registerComponent('model-status',{
   vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=6"></a-asset-item>
+    <a-asset-item id="aasbModel" src="919.3.glb?v=7"></a-asset-item>
     <!-- Exact supplied 1536x768 cobalt nebula image. -->
-    <img id="nebulaTexture" src="nebula.png?v=1" crossorigin="anonymous">
+    <img id="nebulaTexture" src="nebula.png?v=2" crossorigin="anonymous">
   </a-assets>
 
   <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status></a-entity>
@@ -136,7 +148,8 @@ AFRAME.registerComponent('model-status',{
     material="shader:flat; src:#nebulaTexture; side:back; color:#ffffff; fog:false">
   </a-sphere>
 
-  <a-entity id="lambdaFlare" position="0 2.72 0.05" lambda-lens-flare></a-entity>
+  <a-entity id="lambdaFlare" position="0 2.72 0.12" lambda-lens-flare></a-entity>
+  <a-entity id="lambdaLight" position="0 2.05 0.35" lambda-webxr-light></a-entity>
 
   <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
   <a-entity light="type:directional; color:#ffffff; intensity:1.25" position="-3 5 6"></a-entity>
