@@ -86,6 +86,22 @@ AFRAME.registerComponent('model-finish',{
   }
 });
 
+AFRAME.registerComponent('earth-slow-rotate',{
+ schema:{period:{default:180}},
+ init:function(){
+  this.earth=null;
+  this.el.addEventListener('model-loaded',()=>{
+   const root=this.el.getObject3D('mesh');
+   this.earth=root && root.getObjectByName('Sphere');
+   if(!this.earth) console.error('Earth node Sphere not found');
+  });
+ },
+ tick:function(t,dt){
+  if(!this.earth||!dt)return;
+  this.earth.rotation.y+=(Math.PI*2)*(dt/1000)/this.data.period;
+ }
+});
+
 AFRAME.registerComponent('model-status',{
  init:function(){
    const s=document.querySelector('#status');
@@ -107,12 +123,12 @@ AFRAME.registerComponent('model-status',{
   vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=12"></a-asset-item>
+    <a-asset-item id="aasbModel" src="919.3.glb?v=13"></a-asset-item>
     <!-- Exact supplied 1536x768 cobalt nebula image. -->
     <img id="nebulaTexture" src="nebula.png?v=12" crossorigin="anonymous">
   </a-assets>
 
-  <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status model-finish></a-entity>
+  <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status model-finish earth-slow-rotate="period:180"></a-entity>
 
   <!-- Actual supplied nebula image on the inside of the environment sphere.
        Flat/unlit so WebXR lighting cannot wash out its cobalt/black contrast. -->
