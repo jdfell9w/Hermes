@@ -6,72 +6,106 @@
 <title>Hermes WebXR</title>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02051c}</style>
+
 <script>
-AFRAME.registerComponent('apex-flare', {
+AFRAME.registerComponent('apex-follow-flare', {
   init: function () {
+    this.anchor = null;
+    this.flare = document.querySelector('#lambdaFlare');
+    this.worldPos = new THREE.Vector3();
+
     this.el.addEventListener('model-loaded', () => {
       const root = this.el.getObject3D('mesh');
-      const anchor = root && root.getObjectByName('Lamda_flare_core');
-      if (!anchor) {
-        console.error('Lamda_flare_core not found in GLB');
-        return;
-      }
-
-      // Flare is parented directly to the exported Blender apex anchor.
-      const flare = document.createElement('a-entity');
-      flare.setAttribute('id','lambdaFlare');
-      anchor.add(flare.object3D);
-
-      const disc = (r, color, opacity, z) => {
-        const e=document.createElement('a-circle');
-        e.setAttribute('radius',r);
-        e.setAttribute('position',`0 0 ${z}`);
-        e.setAttribute('material',
-          `shader:flat;color:${color};transparent:true;opacity:${opacity};blending:additive;depthWrite:false;side:double`);
-        flare.appendChild(e);
-      };
-      const ray = (w,h,rot,opacity,z) => {
-        const e=document.createElement('a-plane');
-        e.setAttribute('width',w); e.setAttribute('height',h);
-        e.setAttribute('position',`0 0 ${z}`);
-        e.setAttribute('rotation',`0 0 ${rot}`);
-        e.setAttribute('material',
-          `shader:flat;color:#ffffff;transparent:true;opacity:${opacity};blending:additive;depthWrite:false;side:double`);
-        flare.appendChild(e);
-      };
-
-      // Large reference-style flare at the exact apex.
-      disc(.48,'#718cff',.10,.006);
-      disc(.30,'#9aafff',.16,.010);
-      disc(.155,'#dbe4ff',.42,.014);
-      disc(.060,'#ffffff',1.0,.020);
-      ray(1.75,.024,0,.72,.024);
-      ray(1.35,.024,90,.68,.026);
-      ray(.92,.017,45,.44,.028);
-      ray(.92,.017,-45,.44,.030);
+      this.anchor = root && root.getObjectByName('Lamda_flare_core');
+      if (!this.anchor) console.error('Lamda_flare_core not found');
     });
+  },
+  tick: function () {
+    if (!this.anchor || !this.flare) return;
+
+    // Read the TRUE exported apex position every frame.
+    this.anchor.getWorldPosition(this.worldPos);
+
+    // Flare is a real A-Frame scene entity, so it renders reliably.
+    this.flare.object3D.position.copy(this.worldPos);
+
+    // Keep the starburst facing the active camera/headset.
+    const cam = this.el.sceneEl.camera;
+    if (cam) this.flare.object3D.quaternion.copy(cam.quaternion);
   }
 });
 </script>
 </head>
+
 <body>
 <a-scene renderer="antialias:true;colorManagement:true;physicallyCorrectLights:true"
-         xr-mode-ui="enabled:true" background="color:#02051c">
+         xr-mode-ui="enabled:true"
+         background="color:#02051c">
+
   <a-assets timeout="120000">
-    <a-asset-item id="hermesModel" src="919.3.glb"></a-asset-item>
-    <img id="nebula" src="nebula.png" crossorigin="anonymous">
+    <a-asset-item id="hermesModel" src="919.3.glb?v=10"></a-asset-item>
+    <img id="nebula" src="nebula.png?v=10" crossorigin="anonymous">
   </a-assets>
 
+  <!-- Preserve the cobalt nebula -->
   <a-sky src="#nebula" rotation="0 -90 0"></a-sky>
 
-  <!-- Keep current model and lighting; flare now comes from embedded apex anchor. -->
-  <a-entity id="model" gltf-model="#hermesModel" apex-flare position="0 0 -4"></a-entity>
+  <!-- Model; component reads Lamda_flare_core from inside this GLB -->
+  <a-entity id="model"
+            gltf-model="#hermesModel"
+            apex-follow-flare
+            position="0 0 -4">
+  </a-entity>
 
-  <a-entity light="type:ambient;color:#b9c8ff;intensity:1.05"></a-entity>
-  <a-entity light="type:directional;color:#ffffff;intensity:1.35"
-            position="-2 4 3" rotation="-35 -25 0"></a-entity>
-  <a-entity light="type:point;color:#8870ff;intensity:2.1;distance:12;decay:1.4"
-            position="0 1.5 -1.7"></a-entity>
+  <!-- DRAMATIC Lambda brightening.
+       Strong frontal white fill + saturated violet fills. -->
+  <a-entity light="type:ambient;color:#c9d2ff;intensity:1.65"></a-entity>
+
+  <a-entity light="type:directional;color:#ffffff;intensity:3.0"
+            position="-1 4 4"
+            rotation="-28 -12 0">
+  </a-entity>
+
+  <a-entity light="type:point;color:#9b72ff;intensity:9.0;distance:10;decay:1.25"
+            position="-0.72 3.05 -2.15">
+  </a-entity>
+
+  <a-entity light="type:point;color:#d4c4ff;intensity:5.0;distance:8;decay:1.35"
+            position="-0.72 2.15 -1.65">
+  </a-entity>
+
+  <!-- LARGE reference-style flare.
+       Its position is overwritten every frame by the exact GLB apex anchor. -->
+  <a-entity id="lambdaFlare" position="0 0 -20">
+
+    <!-- broad soft glow -->
+    <a-circle radius="0.56" position="0 0 0"
+      material="shader:flat;color:#688cff;transparent:true;opacity:.10;blending:additive;depthWrite:false;side:double">
+    </a-circle>
+    <a-circle radius="0.36" position="0 0 .003"
+      material="shader:flat;color:#9fb7ff;transparent:true;opacity:.17;blending:additive;depthWrite:false;side:double">
+    </a-circle>
+    <a-circle radius="0.19" position="0 0 .006"
+      material="shader:flat;color:#e2e9ff;transparent:true;opacity:.45;blending:additive;depthWrite:false;side:double">
+    </a-circle>
+    <a-circle radius="0.067" position="0 0 .010"
+      material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false;side:double">
+    </a-circle>
+
+    <!-- long starburst rays -->
+    <a-plane width="2.05" height=".027" position="0 0 .014"
+      material="shader:flat;color:#ffffff;transparent:true;opacity:.76;blending:additive;depthWrite:false;side:double">
+    </a-plane>
+    <a-plane width=".027" height="1.58" position="0 0 .016"
+      material="shader:flat;color:#ffffff;transparent:true;opacity:.72;blending:additive;depthWrite:false;side:double">
+    </a-plane>
+    <a-plane width="1.08" height=".019" position="0 0 .018" rotation="0 0 45"
+      material="shader:flat;color:#e7edff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double">
+    </a-plane>
+    <a-plane width="1.08" height=".019" position="0 0 .020" rotation="0 0 -45"
+      material="shader:flat;color:#e7edff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double">
+    </a-plane>
+  </a-entity>
 
   <a-camera position="0 0 0"></a-camera>
 </a-scene>
