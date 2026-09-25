@@ -2,221 +2,149 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<title>919 — Quest WebXR</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Hermes WebXR</title>
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 <style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02051c}
+html,body{margin:0;width:100%;height:100%;background:#020716;overflow:hidden}
+#status{position:fixed;left:10px;bottom:10px;z-index:10;color:white;background:#0009;
+padding:7px 10px;border-radius:8px;font:12px system-ui}
 </style>
-
 <script>
-/* Keep the proven Blender-exported apex anchor, but render a much larger flare. */
-AFRAME.registerComponent('apex-follow-flare', {
+AFRAME.registerComponent('quest-locomotion',{
+  schema:{speed:{default:2.0},snap:{default:30}},
+  init:function(){
+    this.left={x:0,y:0}; this.right={x:0,y:0}; this.ready=true;
+    const L=document.querySelector('#leftHand'), R=document.querySelector('#rightHand');
+    const axis=(side,e)=>{
+      const a=e.detail.axis||[], n=a.length;
+      if(n>=2){
+        const x=a[n-2]||0, y=a[n-1]||0;
+        if(side==='L'){this.left.x=x;this.left.y=y}
+        else {this.right.x=x;this.right.y=y}
+      }
+    };
+    L.addEventListener('axismove',e=>axis('L',e));
+    R.addEventListener('axismove',e=>axis('R',e));
+  },
+  tick:function(time,dt){
+    if(!dt)return;
+    const rig=this.el.object3D, cam=document.querySelector('#camera').object3D;
+    const dead=.18, s=this.data.speed*(dt/1000);
+    const x=Math.abs(this.left.x)>dead?this.left.x:0;
+    const y=Math.abs(this.left.y)>dead?this.left.y:0;
+    if(x||y){
+      const dir=new THREE.Vector3(); cam.getWorldDirection(dir); dir.y=0;
+      if(dir.lengthSq()>0)dir.normalize();
+      const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
+      rig.position.addScaledVector(dir,-y*s);
+      rig.position.addScaledVector(right,x*s);
+    }
+    const rx=Math.abs(this.right.x)>.72?this.right.x:0;
+    if(rx&&this.ready){
+      rig.rotation.y-=THREE.MathUtils.degToRad(this.data.snap)*Math.sign(rx);
+      this.ready=false;
+    }
+    if(Math.abs(this.right.x)<.35)this.ready=true;
+  }
+});
+
+AFRAME.registerComponent('model-finish',{
   init:function(){
     this.anchor=null;
     this.flare=document.querySelector('#lambdaFlare');
-    this.worldPos=new THREE.Vector3();
+    this.p=new THREE.Vector3();
     this.el.addEventListener('model-loaded',()=>{
       const root=this.el.getObject3D('mesh');
       this.anchor=root && root.getObjectByName('Lamda_flare_core');
-      if(!this.anchor) console.error('Lamda_flare_core not found');
+
+      // Actual GLB inspection identifies Text.003 as the lower phrase.
+      const phrase=root && root.getObjectByName('Text.003');
+      if(phrase && phrase.isMesh){
+        const purple=new THREE.MeshStandardMaterial({
+          color:0x6f20a8, metalness:.48, roughness:.22
+        });
+        phrase.material=purple;
+
+        // Gold shell just outside the purple mesh: visible as a bevel/rim.
+        const gold=new THREE.MeshStandardMaterial({
+          color:0xd7a521, metalness:.95, roughness:.16,
+          side:THREE.BackSide
+        });
+        const rim=new THREE.Mesh(phrase.geometry,gold);
+        rim.scale.set(1.035,1.035,1.035);
+        phrase.add(rim);
+      }
     });
   },
   tick:function(){
-    if(!this.anchor || !this.flare) return;
-    this.anchor.getWorldPosition(this.worldPos);
-    this.flare.object3D.position.copy(this.worldPos);
+    if(!this.anchor||!this.flare)return;
+    this.anchor.getWorldPosition(this.p);
+    this.flare.object3D.position.copy(this.p);
     const cam=this.el.sceneEl.camera;
-    if(cam) this.flare.object3D.quaternion.copy(cam.quaternion);
+    if(cam)this.flare.object3D.quaternion.copy(cam.quaternion);
   }
 });
 
-/* Recolor AS ABOVE SO BELOW in the loaded GLB.
-   We identify meshes/materials by exported names containing the phrase or its words.
-   Purple front material + gold secondary/bevel material where the GLB exposes it. */
-AFRAME.registerComponent('aasb-purple-gold', {
-  init:function(){
-    this.el.addEventListener('model-loaded',()=>{
-      const root=this.el.getObject3D('mesh');
-      if(!root) return;
-
-      const purple=new THREE.MeshStandardMaterial({
-        color:new THREE.Color('#5b168f'),
-        metalness:0.48,
-        roughness:0.24
-      });
-      const gold=new THREE.MeshStandardMaterial({
-        color:new THREE.Color('#d8a51d'),
-        metalness:0.95,
-        roughness:0.18
-      });
-
-      let matched=0;
-      root.traverse(o=>{
-        if(!o.isMesh) return;
-        const n=((o.name||'')+' '+((o.material&&o.material.name)||'')).toLowerCase();
-        const hit =
-          n.includes('as above') || n.includes('so below') ||
-          n.includes('as_above') || n.includes('so_below') ||
-          n.includes('above') || n.includes('below');
-
-        if(!hit) return;
-        matched++;
-
-        /* If Blender exported separate material slots, use purple face + gold bevel.
-           If only one slot exists, preserve purple face and add a thin gold back-shell
-           to create a visible gold rim without altering geometry placement. */
-        if(Array.isArray(o.material) && o.material.length>1){
-          o.material=o.material.map((m,i)=> i===0 ? purple.clone() : gold.clone());
-        } else {
-          o.material=purple.clone();
-
-          const rim=new THREE.Mesh(o.geometry, gold.clone());
-          rim.scale.set(1.018,1.018,1.018);
-          rim.position.z=-0.008;
-          rim.renderOrder=(o.renderOrder||0)-1;
-          o.add(rim);
-        }
-      });
-      console.log('AS ABOVE SO BELOW meshes recolored:',matched);
-    });
-  }
-});
-
-/* Quest/WebXR locomotion:
-   left stick = move/strafe
-   right stick = snap turn.
-   Camera remains inside a movable rig so desktop/mobile viewing still works. */
-AFRAME.registerComponent('quest-locomotion', {
-  schema:{
-    speed:{default:2.0},
-    deadzone:{default:0.18},
-    turnAngle:{default:30},
-    turnCooldown:{default:280}
-  },
-  init:function(){
-    this.left=null;
-    this.right=null;
-    this.lastTurn=0;
-    this.v=new THREE.Vector3();
-    this.forward=new THREE.Vector3();
-    this.rightVec=new THREE.Vector3();
-
-    const scene=this.el.sceneEl;
-    scene.addEventListener('enter-vr',()=>this.findGamepads());
-    window.addEventListener('gamepadconnected',()=>this.findGamepads());
-  },
-  findGamepads:function(){
-    const gps=navigator.getGamepads ? navigator.getGamepads() : [];
-    this.left=null; this.right=null;
-    for(const g of gps){
-      if(!g) continue;
-      if(g.hand==='left') this.left=g;
-      else if(g.hand==='right') this.right=g;
-    }
-  },
-  tick:function(t,dt){
-    const gps=navigator.getGamepads ? navigator.getGamepads() : [];
-    let left=null,right=null;
-    for(const g of gps){
-      if(!g) continue;
-      if(g.hand==='left') left=g;
-      else if(g.hand==='right') right=g;
-    }
-    if(!left && !right) return;
-
-    const dz=this.data.deadzone;
-    const lx=left && left.axes ? (left.axes[2] ?? left.axes[0] ?? 0) : 0;
-    const ly=left && left.axes ? (left.axes[3] ?? left.axes[1] ?? 0) : 0;
-    const rx=right && right.axes ? (right.axes[2] ?? right.axes[0] ?? 0) : 0;
-
-    const cam=this.el.sceneEl.camera;
-    if(cam && (Math.abs(lx)>dz || Math.abs(ly)>dz)){
-      cam.getWorldDirection(this.forward);
-      this.forward.y=0;
-      if(this.forward.lengthSq()>0) this.forward.normalize();
-      this.rightVec.crossVectors(this.forward,new THREE.Vector3(0,1,0)).normalize();
-
-      this.v.set(0,0,0);
-      this.v.addScaledVector(this.rightVec, lx);
-      this.v.addScaledVector(this.forward, -ly);
-      if(this.v.lengthSq()>1) this.v.normalize();
-      this.v.multiplyScalar(this.data.speed*(dt/1000));
-      this.el.object3D.position.add(this.v);
-    }
-
-    if(Math.abs(rx)>0.72 && t-this.lastTurn>this.data.turnCooldown){
-      this.el.object3D.rotation.y += THREE.MathUtils.degToRad(
-        rx>0 ? -this.data.turnAngle : this.data.turnAngle
-      );
-      this.lastTurn=t;
-    }
-  }
+AFRAME.registerComponent('model-status',{
+ init:function(){
+   const s=document.querySelector('#status');
+   this.el.addEventListener('model-loaded',()=>{
+     s.textContent='919 loaded — enter VR';
+     setTimeout(()=>s.style.display='none',3000)
+   });
+   this.el.addEventListener('model-error',()=>{s.textContent='919.3.glb failed to load'});
+ }
 });
 </script>
 </head>
-
 <body>
-<a-scene renderer="antialias:true;colorManagement:true;physicallyCorrectLights:true"
-         xr-mode-ui="enabled:true"
-         background="color:#02051c">
+<div id="status">Loading 919.3.glb…</div>
+
+<a-scene
+  background="color:#020716"
+  renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
+  vr-mode-ui="enabled:true">
 
   <a-assets timeout="120000">
-    <a-asset-item id="hermesModel" src="919.3.glb?v=11"></a-asset-item>
-    <img id="nebula" src="nebula.png?v=11" crossorigin="anonymous">
+    <a-asset-item id="aasbModel" src="919.3.glb?v=12"></a-asset-item>
+    <!-- Exact supplied 1536x768 cobalt nebula image. -->
+    <img id="nebulaTexture" src="nebula.png?v=12" crossorigin="anonymous">
   </a-assets>
 
-  <a-sky src="#nebula" rotation="0 -90 0"></a-sky>
+  <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status model-finish></a-entity>
 
-  <a-entity id="model"
-            gltf-model="#hermesModel"
-            apex-follow-flare
-            aasb-purple-gold
-            position="0 0 -4">
-  </a-entity>
+  <!-- Actual supplied nebula image on the inside of the environment sphere.
+       Flat/unlit so WebXR lighting cannot wash out its cobalt/black contrast. -->
+  <a-sphere id="nebulaBackground"
+    radius="80"
+    segments-width="96"
+    segments-height="64"
+    rotation="0 -90 0"
+    material="shader:flat; src:#nebulaTexture; side:back; color:#ffffff; fog:false">
+  </a-sphere>
 
-  <!-- Strong Lambda illumination retained -->
-  <a-entity light="type:ambient;color:#c9d2ff;intensity:1.65"></a-entity>
-  <a-entity light="type:directional;color:#ffffff;intensity:3.0"
-            position="-1 4 4" rotation="-28 -12 0"></a-entity>
-  <a-entity light="type:point;color:#9b72ff;intensity:9.0;distance:10;decay:1.25"
-            position="-0.72 3.05 -2.15"></a-entity>
-  <a-entity light="type:point;color:#d4c4ff;intensity:5.0;distance:8;decay:1.35"
-            position="-0.72 2.15 -1.65"></a-entity>
-
-  <!-- MUCH LARGER apex flare. Horizontal beam is deliberately dominant. -->
   <a-entity id="lambdaFlare" position="0 0 -20">
-    <a-circle radius=".82" position="0 0 0"
-      material="shader:flat;color:#688cff;transparent:true;opacity:.075;blending:additive;depthWrite:false;side:double"></a-circle>
-    <a-circle radius=".48" position="0 0 .003"
-      material="shader:flat;color:#9fb7ff;transparent:true;opacity:.15;blending:additive;depthWrite:false;side:double"></a-circle>
-    <a-circle radius=".24" position="0 0 .006"
-      material="shader:flat;color:#e2e9ff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double"></a-circle>
-    <a-circle radius=".085" position="0 0 .010"
-      material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false;side:double"></a-circle>
-
-    <!-- dominant horizontal flare -->
-    <a-plane width="5.2" height=".052" position="0 0 .014"
-      material="shader:flat;color:#ffffff;transparent:true;opacity:.88;blending:additive;depthWrite:false;side:double"></a-plane>
-    <a-plane width="3.65" height=".115" position="0 0 .013"
-      material="shader:flat;color:#a7baff;transparent:true;opacity:.19;blending:additive;depthWrite:false;side:double"></a-plane>
-
-    <!-- shorter vertical and diagonal rays -->
-    <a-plane width=".034" height="2.15" position="0 0 .016"
-      material="shader:flat;color:#ffffff;transparent:true;opacity:.68;blending:additive;depthWrite:false;side:double"></a-plane>
-    <a-plane width="1.55" height=".025" position="0 0 .018" rotation="0 0 45"
-      material="shader:flat;color:#edf1ff;transparent:true;opacity:.46;blending:additive;depthWrite:false;side:double"></a-plane>
-    <a-plane width="1.55" height=".025" position="0 0 .020" rotation="0 0 -45"
-      material="shader:flat;color:#edf1ff;transparent:true;opacity:.46;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-circle radius=".56" material="shader:flat;color:#688cff;transparent:true;opacity:.10;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-circle radius=".36" position="0 0 .003" material="shader:flat;color:#9fb7ff;transparent:true;opacity:.17;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-circle radius=".19" position="0 0 .006" material="shader:flat;color:#e2e9ff;transparent:true;opacity:.45;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-circle radius=".067" position="0 0 .010" material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-plane width="2.05" height=".027" position="0 0 .014" material="shader:flat;color:#ffffff;transparent:true;opacity:.76;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-plane width=".027" height="1.58" position="0 0 .016" material="shader:flat;color:#ffffff;transparent:true;opacity:.72;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-plane width="1.08" height=".019" position="0 0 .018" rotation="0 0 45" material="shader:flat;color:#e7edff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-plane width="1.08" height=".019" position="0 0 .020" rotation="0 0 -45" material="shader:flat;color:#e7edff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double"></a-plane>
   </a-entity>
 
-  <!-- Movable player rig for Quest -->
-  <a-entity id="rig" quest-locomotion>
-    <a-camera position="0 0 0"></a-camera>
-    <a-entity laser-controls="hand:left"></a-entity>
-    <a-entity laser-controls="hand:right"></a-entity>
-  </a-entity>
+  <a-entity light="type:ambient; color:#c9d2ff; intensity:1.35"></a-entity>
+  <a-entity light="type:directional; color:#ffffff; intensity:2.4" position="-3 5 6"></a-entity>
+  <a-entity light="type:directional; color:#b5c5ff; intensity:1.25" position="4 2 5"></a-entity>
+  <a-entity light="type:point; color:#9b72ff; intensity:8.0; distance:8; decay:1.3" position="-0.72 3.0 2.0"></a-entity>
 
+  <a-entity id="rig" position="0 0 8" quest-locomotion="speed:2.0; snap:30">
+    <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls="acceleration:20"></a-camera>
+    <a-entity id="leftHand" hand-controls="hand:left; handModelStyle:lowPoly; color:#ffffff"></a-entity>
+    <a-entity id="rightHand" hand-controls="hand:right; handModelStyle:lowPoly; color:#ffffff"></a-entity>
+  </a-entity>
 </a-scene>
 </body>
 </html>
