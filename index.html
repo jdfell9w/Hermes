@@ -2,164 +2,38 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>919 — Quest WebXR</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-<style>
-html,body{margin:0;width:100%;height:100%;background:#020716;overflow:hidden}
-#status{position:fixed;left:10px;bottom:10px;z-index:10;color:white;background:#0009;
-padding:7px 10px;border-radius:8px;font:12px system-ui}
-</style>
-<script>
-AFRAME.registerComponent('quest-locomotion',{
-  schema:{speed:{default:2.0},snap:{default:30}},
-  init:function(){
-    this.left={x:0,y:0}; this.right={x:0,y:0}; this.ready=true;
-    const L=document.querySelector('#leftHand'), R=document.querySelector('#rightHand');
-    const axis=(side,e)=>{
-      const a=e.detail.axis || [], n=a.length;
-      if(n>=2){
-        const x=a[n-2]||0, y=a[n-1]||0;
-        if(side==='L'){this.left.x=x;this.left.y=y}
-        else {this.right.x=x;this.right.y=y}
-      }
-    };
-    L.addEventListener('axismove',e=>axis('L',e));
-    R.addEventListener('axismove',e=>axis('R',e));
-  },
-  tick:function(time,dt){
-    if(!dt) return;
-    const rig=this.el.object3D, cam=document.querySelector('#camera').object3D;
-    const dead=.18, s=this.data.speed*(dt/1000);
-    let x=Math.abs(this.left.x)>dead?this.left.x:0;
-    let y=Math.abs(this.left.y)>dead?this.left.y:0;
-    if(x||y){
-      const dir=new THREE.Vector3();
-      cam.getWorldDirection(dir); dir.y=0;
-      if(dir.lengthSq()>0) dir.normalize();
-      const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
-      rig.position.addScaledVector(dir,-y*s);
-      rig.position.addScaledVector(right,x*s);
-    }
-    const rx=Math.abs(this.right.x)>0.72?this.right.x:0;
-    if(rx && this.ready){
-      rig.rotation.y -= THREE.MathUtils.degToRad(this.data.snap)*Math.sign(rx);
-      this.ready=false;
-    }
-    if(Math.abs(this.right.x)<.35) this.ready=true;
-  }
-});
-
-/* Camera-facing additive flare retained from the working version. */
-AFRAME.registerComponent('lambda-lens-flare',{
-  init:function(){
-    const c=document.createElement('canvas');
-    c.width=c.height=512;
-    const x=c.getContext('2d'), cx=256, cy=256;
-
-    // Soft luminous core.
-    let g=x.createRadialGradient(cx,cy,0,cx,cy,110);
-    g.addColorStop(0,'rgba(255,255,255,1)');
-    g.addColorStop(.045,'rgba(255,250,225,1)');
-    g.addColorStop(.12,'rgba(220,225,255,.92)');
-    g.addColorStop(.32,'rgba(125,120,255,.38)');
-    g.addColorStop(.68,'rgba(55,45,190,.12)');
-    g.addColorStop(1,'rgba(30,20,120,0)');
-    x.fillStyle=g; x.fillRect(0,0,512,512);
-
-    // Long tapered rays, all sharing exactly the same center.
-    x.save(); x.translate(cx,cy);
-    const ray=(angle,length,width,alpha)=>{
-      x.save(); x.rotate(angle);
-      const rg=x.createLinearGradient(0,0,length,0);
-      rg.addColorStop(0,`rgba(255,255,255,${alpha})`);
-      rg.addColorStop(.18,`rgba(235,235,255,${alpha*.55})`);
-      rg.addColorStop(1,'rgba(210,220,255,0)');
-      x.fillStyle=rg;
-      x.beginPath(); x.moveTo(0,-width/2); x.lineTo(length,0); x.lineTo(0,width/2); x.closePath(); x.fill();
-      x.restore();
-    };
-    ray(0,250,4,.95); ray(Math.PI,250,4,.95);
-    ray(Math.PI/2,250,4,.95); ray(-Math.PI/2,250,4,.95);
-    ray(Math.PI/4,190,2.2,.58); ray(Math.PI*5/4,190,2.2,.58);
-    ray(Math.PI*3/4,190,2.2,.58); ray(-Math.PI/4,190,2.2,.58);
-    x.restore();
-
-    const tex=new THREE.CanvasTexture(c);
-    tex.colorSpace=THREE.SRGBColorSpace;
-    const mat=new THREE.SpriteMaterial({
-      map:tex,transparent:true,opacity:1,depthWrite:false,depthTest:false,
-      blending:THREE.AdditiveBlending
-    });
-    const sprite=new THREE.Sprite(mat);
-    sprite.scale.set(3.8,3.8,1);
-    this.el.object3D.add(sprite);
-  }
-});
-
-/* WebXR-only brightening for the Lambda mesh.
-   Adds light aimed at the Lambda without changing the GLB material. */
-AFRAME.registerComponent('lambda-webxr-light',{
-  init:function(){
-    const light=new THREE.PointLight(0xa58cff,9.0,6.5,1.35);
-    light.position.set(0,0.05,0.85);
-    this.el.object3D.add(light);
-    const fill=new THREE.PointLight(0xffffff,3.0,5.5,1.6);
-    fill.position.set(0,0.15,1.1);
-    this.el.object3D.add(fill);
-  }
-});
-
-AFRAME.registerComponent('model-status',{
- init:function(){
-   const s=document.querySelector('#status');
-   this.el.addEventListener('model-loaded',()=>{
-     s.textContent='919 loaded — enter VR';
-     setTimeout(()=>s.style.display='none',3000)
-   });
-   this.el.addEventListener('model-error',()=>{s.textContent='919.3.glb failed to load'});
- }
-});
-</script>
+<title>Hermes WebXR</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02051c}</style>
 </head>
 <body>
-<div id="status">Loading 919.3.glb…</div>
+<a-scene renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
+ xr-mode-ui="enabled:true" background="color:#02051c">
+ <a-assets timeout="120000">
+  <a-asset-item id="hermesModel" src="919.3.glb"></a-asset-item>
+  <img id="nebula" src="nebula.png" crossorigin="anonymous">
+ </a-assets>
+ <a-sky src="#nebula" rotation="0 -90 0"></a-sky>
+ <a-entity gltf-model="#hermesModel" position="0 0 -4"></a-entity>
 
-<a-scene
-  background="color:#020716"
-  renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
-  vr-mode-ui="enabled:true">
+ <!-- brighter Lambda fill -->
+ <a-entity light="type:ambient;color:#b9c8ff;intensity:1.05"></a-entity>
+ <a-entity light="type:directional;color:#ffffff;intensity:1.35" position="-2 4 3" rotation="-35 -25 0"></a-entity>
+ <a-entity light="type:point;color:#8870ff;intensity:2.1;distance:12;decay:1.4" position="0 1.5 -1.7"></a-entity>
 
-  <a-assets timeout="120000">
-    <a-asset-item id="aasbModel" src="919.3.glb?v=8"></a-asset-item>
-    <!-- Exact supplied 1536x768 cobalt nebula image. -->
-    <img id="nebulaTexture" src="nebula.png?v=2" crossorigin="anonymous">
-  </a-assets>
-
-  <a-entity id="aasb" gltf-model="#aasbModel" position="0 0 0" model-status></a-entity>
-
-  <!-- Actual supplied nebula image on the inside of the environment sphere.
-       Flat/unlit so WebXR lighting cannot wash out its cobalt/black contrast. -->
-  <a-sphere id="nebulaBackground"
-    radius="80"
-    segments-width="96"
-    segments-height="64"
-    rotation="0 -90 0"
-    material="shader:flat; src:#nebulaTexture; side:back; color:#ffffff; fog:false">
-  </a-sphere>
-
-  <a-entity id="lambdaFlare" position="-0.35 2.72 0.18" lambda-lens-flare></a-entity>
-  <a-entity id="lambdaLight" position="-0.35 2.05 0.65" lambda-webxr-light></a-entity>
-
-  <a-entity light="type:ambient; color:#d5ddff; intensity:0.9"></a-entity>
-  <a-entity light="type:directional; color:#ffffff; intensity:1.25" position="-3 5 6"></a-entity>
-  <a-entity light="type:directional; color:#b5c5ff; intensity:0.75" position="4 2 5"></a-entity>
-
-  <a-entity id="rig" position="0 0 8" quest-locomotion="speed:2.0; snap:30">
-    <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls="acceleration:20"></a-camera>
-    <a-entity id="leftHand" hand-controls="hand:left; handModelStyle:lowPoly; color:#ffffff"></a-entity>
-    <a-entity id="rightHand" hand-controls="hand:right; handModelStyle:lowPoly; color:#ffffff"></a-entity>
-  </a-entity>
+ <!-- MUCH LARGER flare, centered on Lambda apex -->
+ <a-entity id="lambdaFlare" position="0 1.57 -3.48">
+  <a-circle radius=".58" material="shader:flat;color:#7898ff;transparent:true;opacity:.12;blending:additive;depthWrite:false"></a-circle>
+  <a-circle radius=".38" position="0 0 .003" material="shader:flat;color:#a7b9ff;transparent:true;opacity:.20;blending:additive;depthWrite:false"></a-circle>
+  <a-circle radius=".20" position="0 0 .006" material="shader:flat;color:#e2e8ff;transparent:true;opacity:.48;blending:additive;depthWrite:false"></a-circle>
+  <a-circle radius=".075" position="0 0 .009" material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false"></a-circle>
+  <a-plane width="2.15" height=".035" position="0 0 .012" material="shader:flat;color:#ffffff;transparent:true;opacity:.72;blending:additive;depthWrite:false"></a-plane>
+  <a-plane width=".035" height="1.65" position="0 0 .014" material="shader:flat;color:#ffffff;transparent:true;opacity:.62;blending:additive;depthWrite:false"></a-plane>
+  <a-plane width="1.35" height=".024" position="0 0 .016" rotation="0 0 45" material="shader:flat;color:#dce7ff;transparent:true;opacity:.46;blending:additive;depthWrite:false"></a-plane>
+  <a-plane width="1.35" height=".024" position="0 0 .018" rotation="0 0 -45" material="shader:flat;color:#dce7ff;transparent:true;opacity:.46;blending:additive;depthWrite:false"></a-plane>
+ </a-entity>
+ <a-camera position="0 0 0"></a-camera>
 </a-scene>
 </body>
 </html>
