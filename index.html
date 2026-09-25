@@ -6,34 +6,74 @@
 <title>Hermes WebXR</title>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02051c}</style>
+<script>
+AFRAME.registerComponent('apex-flare', {
+  init: function () {
+    this.el.addEventListener('model-loaded', () => {
+      const root = this.el.getObject3D('mesh');
+      const anchor = root && root.getObjectByName('Lamda_flare_core');
+      if (!anchor) {
+        console.error('Lamda_flare_core not found in GLB');
+        return;
+      }
+
+      // Flare is parented directly to the exported Blender apex anchor.
+      const flare = document.createElement('a-entity');
+      flare.setAttribute('id','lambdaFlare');
+      anchor.add(flare.object3D);
+
+      const disc = (r, color, opacity, z) => {
+        const e=document.createElement('a-circle');
+        e.setAttribute('radius',r);
+        e.setAttribute('position',`0 0 ${z}`);
+        e.setAttribute('material',
+          `shader:flat;color:${color};transparent:true;opacity:${opacity};blending:additive;depthWrite:false;side:double`);
+        flare.appendChild(e);
+      };
+      const ray = (w,h,rot,opacity,z) => {
+        const e=document.createElement('a-plane');
+        e.setAttribute('width',w); e.setAttribute('height',h);
+        e.setAttribute('position',`0 0 ${z}`);
+        e.setAttribute('rotation',`0 0 ${rot}`);
+        e.setAttribute('material',
+          `shader:flat;color:#ffffff;transparent:true;opacity:${opacity};blending:additive;depthWrite:false;side:double`);
+        flare.appendChild(e);
+      };
+
+      // Large reference-style flare at the exact apex.
+      disc(.48,'#718cff',.10,.006);
+      disc(.30,'#9aafff',.16,.010);
+      disc(.155,'#dbe4ff',.42,.014);
+      disc(.060,'#ffffff',1.0,.020);
+      ray(1.75,.024,0,.72,.024);
+      ray(1.35,.024,90,.68,.026);
+      ray(.92,.017,45,.44,.028);
+      ray(.92,.017,-45,.44,.030);
+    });
+  }
+});
+</script>
 </head>
 <body>
-<a-scene renderer="antialias:true; colorManagement:true; physicallyCorrectLights:true"
- xr-mode-ui="enabled:true" background="color:#02051c">
- <a-assets timeout="120000">
-  <a-asset-item id="hermesModel" src="919.3.glb"></a-asset-item>
-  <img id="nebula" src="nebula.png" crossorigin="anonymous">
- </a-assets>
- <a-sky src="#nebula" rotation="0 -90 0"></a-sky>
- <a-entity gltf-model="#hermesModel" position="0 0 -4"></a-entity>
+<a-scene renderer="antialias:true;colorManagement:true;physicallyCorrectLights:true"
+         xr-mode-ui="enabled:true" background="color:#02051c">
+  <a-assets timeout="120000">
+    <a-asset-item id="hermesModel" src="919.3.glb"></a-asset-item>
+    <img id="nebula" src="nebula.png" crossorigin="anonymous">
+  </a-assets>
 
- <!-- brighter Lambda fill -->
- <a-entity light="type:ambient;color:#b9c8ff;intensity:1.05"></a-entity>
- <a-entity light="type:directional;color:#ffffff;intensity:1.35" position="-2 4 3" rotation="-35 -25 0"></a-entity>
- <a-entity light="type:point;color:#8870ff;intensity:2.1;distance:12;decay:1.4" position="0 1.5 -1.7"></a-entity>
+  <a-sky src="#nebula" rotation="0 -90 0"></a-sky>
 
- <!-- MUCH LARGER flare, centered on Lambda apex -->
- <a-entity id="lambdaFlare" position="0 1.57 -3.48">
-  <a-circle radius=".58" material="shader:flat;color:#7898ff;transparent:true;opacity:.12;blending:additive;depthWrite:false"></a-circle>
-  <a-circle radius=".38" position="0 0 .003" material="shader:flat;color:#a7b9ff;transparent:true;opacity:.20;blending:additive;depthWrite:false"></a-circle>
-  <a-circle radius=".20" position="0 0 .006" material="shader:flat;color:#e2e8ff;transparent:true;opacity:.48;blending:additive;depthWrite:false"></a-circle>
-  <a-circle radius=".075" position="0 0 .009" material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false"></a-circle>
-  <a-plane width="2.15" height=".035" position="0 0 .012" material="shader:flat;color:#ffffff;transparent:true;opacity:.72;blending:additive;depthWrite:false"></a-plane>
-  <a-plane width=".035" height="1.65" position="0 0 .014" material="shader:flat;color:#ffffff;transparent:true;opacity:.62;blending:additive;depthWrite:false"></a-plane>
-  <a-plane width="1.35" height=".024" position="0 0 .016" rotation="0 0 45" material="shader:flat;color:#dce7ff;transparent:true;opacity:.46;blending:additive;depthWrite:false"></a-plane>
-  <a-plane width="1.35" height=".024" position="0 0 .018" rotation="0 0 -45" material="shader:flat;color:#dce7ff;transparent:true;opacity:.46;blending:additive;depthWrite:false"></a-plane>
- </a-entity>
- <a-camera position="0 0 0"></a-camera>
+  <!-- Keep current model and lighting; flare now comes from embedded apex anchor. -->
+  <a-entity id="model" gltf-model="#hermesModel" apex-flare position="0 0 -4"></a-entity>
+
+  <a-entity light="type:ambient;color:#b9c8ff;intensity:1.05"></a-entity>
+  <a-entity light="type:directional;color:#ffffff;intensity:1.35"
+            position="-2 4 3" rotation="-35 -25 0"></a-entity>
+  <a-entity light="type:point;color:#8870ff;intensity:2.1;distance:12;decay:1.4"
+            position="0 1.5 -1.7"></a-entity>
+
+  <a-camera position="0 0 0"></a-camera>
 </a-scene>
 </body>
 </html>
