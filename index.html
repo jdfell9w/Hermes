@@ -5,33 +5,152 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Hermes WebXR</title>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02051c}</style>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02051c}
+</style>
 
 <script>
+/* Keep the proven Blender-exported apex anchor, but render a much larger flare. */
 AFRAME.registerComponent('apex-follow-flare', {
-  init: function () {
-    this.anchor = null;
-    this.flare = document.querySelector('#lambdaFlare');
-    this.worldPos = new THREE.Vector3();
-
-    this.el.addEventListener('model-loaded', () => {
-      const root = this.el.getObject3D('mesh');
-      this.anchor = root && root.getObjectByName('Lamda_flare_core');
-      if (!this.anchor) console.error('Lamda_flare_core not found');
+  init:function(){
+    this.anchor=null;
+    this.flare=document.querySelector('#lambdaFlare');
+    this.worldPos=new THREE.Vector3();
+    this.el.addEventListener('model-loaded',()=>{
+      const root=this.el.getObject3D('mesh');
+      this.anchor=root && root.getObjectByName('Lamda_flare_core');
+      if(!this.anchor) console.error('Lamda_flare_core not found');
     });
   },
-  tick: function () {
-    if (!this.anchor || !this.flare) return;
-
-    // Read the TRUE exported apex position every frame.
+  tick:function(){
+    if(!this.anchor || !this.flare) return;
     this.anchor.getWorldPosition(this.worldPos);
-
-    // Flare is a real A-Frame scene entity, so it renders reliably.
     this.flare.object3D.position.copy(this.worldPos);
+    const cam=this.el.sceneEl.camera;
+    if(cam) this.flare.object3D.quaternion.copy(cam.quaternion);
+  }
+});
 
-    // Keep the starburst facing the active camera/headset.
-    const cam = this.el.sceneEl.camera;
-    if (cam) this.flare.object3D.quaternion.copy(cam.quaternion);
+/* Recolor AS ABOVE SO BELOW in the loaded GLB.
+   We identify meshes/materials by exported names containing the phrase or its words.
+   Purple front material + gold secondary/bevel material where the GLB exposes it. */
+AFRAME.registerComponent('aasb-purple-gold', {
+  init:function(){
+    this.el.addEventListener('model-loaded',()=>{
+      const root=this.el.getObject3D('mesh');
+      if(!root) return;
+
+      const purple=new THREE.MeshStandardMaterial({
+        color:new THREE.Color('#5b168f'),
+        metalness:0.48,
+        roughness:0.24
+      });
+      const gold=new THREE.MeshStandardMaterial({
+        color:new THREE.Color('#d8a51d'),
+        metalness:0.95,
+        roughness:0.18
+      });
+
+      let matched=0;
+      root.traverse(o=>{
+        if(!o.isMesh) return;
+        const n=((o.name||'')+' '+((o.material&&o.material.name)||'')).toLowerCase();
+        const hit =
+          n.includes('as above') || n.includes('so below') ||
+          n.includes('as_above') || n.includes('so_below') ||
+          n.includes('above') || n.includes('below');
+
+        if(!hit) return;
+        matched++;
+
+        /* If Blender exported separate material slots, use purple face + gold bevel.
+           If only one slot exists, preserve purple face and add a thin gold back-shell
+           to create a visible gold rim without altering geometry placement. */
+        if(Array.isArray(o.material) && o.material.length>1){
+          o.material=o.material.map((m,i)=> i===0 ? purple.clone() : gold.clone());
+        } else {
+          o.material=purple.clone();
+
+          const rim=new THREE.Mesh(o.geometry, gold.clone());
+          rim.scale.set(1.018,1.018,1.018);
+          rim.position.z=-0.008;
+          rim.renderOrder=(o.renderOrder||0)-1;
+          o.add(rim);
+        }
+      });
+      console.log('AS ABOVE SO BELOW meshes recolored:',matched);
+    });
+  }
+});
+
+/* Quest/WebXR locomotion:
+   left stick = move/strafe
+   right stick = snap turn.
+   Camera remains inside a movable rig so desktop/mobile viewing still works. */
+AFRAME.registerComponent('quest-locomotion', {
+  schema:{
+    speed:{default:2.0},
+    deadzone:{default:0.18},
+    turnAngle:{default:30},
+    turnCooldown:{default:280}
+  },
+  init:function(){
+    this.left=null;
+    this.right=null;
+    this.lastTurn=0;
+    this.v=new THREE.Vector3();
+    this.forward=new THREE.Vector3();
+    this.rightVec=new THREE.Vector3();
+
+    const scene=this.el.sceneEl;
+    scene.addEventListener('enter-vr',()=>this.findGamepads());
+    window.addEventListener('gamepadconnected',()=>this.findGamepads());
+  },
+  findGamepads:function(){
+    const gps=navigator.getGamepads ? navigator.getGamepads() : [];
+    this.left=null; this.right=null;
+    for(const g of gps){
+      if(!g) continue;
+      if(g.hand==='left') this.left=g;
+      else if(g.hand==='right') this.right=g;
+    }
+  },
+  tick:function(t,dt){
+    const gps=navigator.getGamepads ? navigator.getGamepads() : [];
+    let left=null,right=null;
+    for(const g of gps){
+      if(!g) continue;
+      if(g.hand==='left') left=g;
+      else if(g.hand==='right') right=g;
+    }
+    if(!left && !right) return;
+
+    const dz=this.data.deadzone;
+    const lx=left && left.axes ? (left.axes[2] ?? left.axes[0] ?? 0) : 0;
+    const ly=left && left.axes ? (left.axes[3] ?? left.axes[1] ?? 0) : 0;
+    const rx=right && right.axes ? (right.axes[2] ?? right.axes[0] ?? 0) : 0;
+
+    const cam=this.el.sceneEl.camera;
+    if(cam && (Math.abs(lx)>dz || Math.abs(ly)>dz)){
+      cam.getWorldDirection(this.forward);
+      this.forward.y=0;
+      if(this.forward.lengthSq()>0) this.forward.normalize();
+      this.rightVec.crossVectors(this.forward,new THREE.Vector3(0,1,0)).normalize();
+
+      this.v.set(0,0,0);
+      this.v.addScaledVector(this.rightVec, lx);
+      this.v.addScaledVector(this.forward, -ly);
+      if(this.v.lengthSq()>1) this.v.normalize();
+      this.v.multiplyScalar(this.data.speed*(dt/1000));
+      this.el.object3D.position.add(this.v);
+    }
+
+    if(Math.abs(rx)>0.72 && t-this.lastTurn>this.data.turnCooldown){
+      this.el.object3D.rotation.y += THREE.MathUtils.degToRad(
+        rx>0 ? -this.data.turnAngle : this.data.turnAngle
+      );
+      this.lastTurn=t;
+    }
   }
 });
 </script>
@@ -43,71 +162,61 @@ AFRAME.registerComponent('apex-follow-flare', {
          background="color:#02051c">
 
   <a-assets timeout="120000">
-    <a-asset-item id="hermesModel" src="919.3.glb?v=10"></a-asset-item>
-    <img id="nebula" src="nebula.png?v=10" crossorigin="anonymous">
+    <a-asset-item id="hermesModel" src="919.3.glb?v=11"></a-asset-item>
+    <img id="nebula" src="nebula.png?v=11" crossorigin="anonymous">
   </a-assets>
 
-  <!-- Preserve the cobalt nebula -->
   <a-sky src="#nebula" rotation="0 -90 0"></a-sky>
 
-  <!-- Model; component reads Lamda_flare_core from inside this GLB -->
   <a-entity id="model"
             gltf-model="#hermesModel"
             apex-follow-flare
+            aasb-purple-gold
             position="0 0 -4">
   </a-entity>
 
-  <!-- DRAMATIC Lambda brightening.
-       Strong frontal white fill + saturated violet fills. -->
+  <!-- Strong Lambda illumination retained -->
   <a-entity light="type:ambient;color:#c9d2ff;intensity:1.65"></a-entity>
-
   <a-entity light="type:directional;color:#ffffff;intensity:3.0"
-            position="-1 4 4"
-            rotation="-28 -12 0">
-  </a-entity>
-
+            position="-1 4 4" rotation="-28 -12 0"></a-entity>
   <a-entity light="type:point;color:#9b72ff;intensity:9.0;distance:10;decay:1.25"
-            position="-0.72 3.05 -2.15">
-  </a-entity>
-
+            position="-0.72 3.05 -2.15"></a-entity>
   <a-entity light="type:point;color:#d4c4ff;intensity:5.0;distance:8;decay:1.35"
-            position="-0.72 2.15 -1.65">
-  </a-entity>
+            position="-0.72 2.15 -1.65"></a-entity>
 
-  <!-- LARGE reference-style flare.
-       Its position is overwritten every frame by the exact GLB apex anchor. -->
+  <!-- MUCH LARGER apex flare. Horizontal beam is deliberately dominant. -->
   <a-entity id="lambdaFlare" position="0 0 -20">
+    <a-circle radius=".82" position="0 0 0"
+      material="shader:flat;color:#688cff;transparent:true;opacity:.075;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-circle radius=".48" position="0 0 .003"
+      material="shader:flat;color:#9fb7ff;transparent:true;opacity:.15;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-circle radius=".24" position="0 0 .006"
+      material="shader:flat;color:#e2e9ff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double"></a-circle>
+    <a-circle radius=".085" position="0 0 .010"
+      material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false;side:double"></a-circle>
 
-    <!-- broad soft glow -->
-    <a-circle radius="0.56" position="0 0 0"
-      material="shader:flat;color:#688cff;transparent:true;opacity:.10;blending:additive;depthWrite:false;side:double">
-    </a-circle>
-    <a-circle radius="0.36" position="0 0 .003"
-      material="shader:flat;color:#9fb7ff;transparent:true;opacity:.17;blending:additive;depthWrite:false;side:double">
-    </a-circle>
-    <a-circle radius="0.19" position="0 0 .006"
-      material="shader:flat;color:#e2e9ff;transparent:true;opacity:.45;blending:additive;depthWrite:false;side:double">
-    </a-circle>
-    <a-circle radius="0.067" position="0 0 .010"
-      material="shader:flat;color:#ffffff;transparent:true;opacity:1;blending:additive;depthWrite:false;side:double">
-    </a-circle>
+    <!-- dominant horizontal flare -->
+    <a-plane width="5.2" height=".052" position="0 0 .014"
+      material="shader:flat;color:#ffffff;transparent:true;opacity:.88;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-plane width="3.65" height=".115" position="0 0 .013"
+      material="shader:flat;color:#a7baff;transparent:true;opacity:.19;blending:additive;depthWrite:false;side:double"></a-plane>
 
-    <!-- long starburst rays -->
-    <a-plane width="2.05" height=".027" position="0 0 .014"
-      material="shader:flat;color:#ffffff;transparent:true;opacity:.76;blending:additive;depthWrite:false;side:double">
-    </a-plane>
-    <a-plane width=".027" height="1.58" position="0 0 .016"
-      material="shader:flat;color:#ffffff;transparent:true;opacity:.72;blending:additive;depthWrite:false;side:double">
-    </a-plane>
-    <a-plane width="1.08" height=".019" position="0 0 .018" rotation="0 0 45"
-      material="shader:flat;color:#e7edff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double">
-    </a-plane>
-    <a-plane width="1.08" height=".019" position="0 0 .020" rotation="0 0 -45"
-      material="shader:flat;color:#e7edff;transparent:true;opacity:.48;blending:additive;depthWrite:false;side:double">
-    </a-plane>
+    <!-- shorter vertical and diagonal rays -->
+    <a-plane width=".034" height="2.15" position="0 0 .016"
+      material="shader:flat;color:#ffffff;transparent:true;opacity:.68;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-plane width="1.55" height=".025" position="0 0 .018" rotation="0 0 45"
+      material="shader:flat;color:#edf1ff;transparent:true;opacity:.46;blending:additive;depthWrite:false;side:double"></a-plane>
+    <a-plane width="1.55" height=".025" position="0 0 .020" rotation="0 0 -45"
+      material="shader:flat;color:#edf1ff;transparent:true;opacity:.46;blending:additive;depthWrite:false;side:double"></a-plane>
   </a-entity>
 
-  <a-camera position="0 0 0"></a-camera>
+  <!-- Movable player rig for Quest -->
+  <a-entity id="rig" quest-locomotion>
+    <a-camera position="0 0 0"></a-camera>
+    <a-entity laser-controls="hand:left"></a-entity>
+    <a-entity laser-controls="hand:right"></a-entity>
+  </a-entity>
+
 </a-scene>
 </body>
 </html>
